@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Savourtaste — where should you eat?</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+    <header class="hero">
+        <h1>savourtaste</h1>
+        <p class="tagline">tell me your mood. i'll tell you where to eat.</p>
+        <div class="location-chip" id="location-chip">loading location…</div>
+    </header>
+
+    <main>
+        <section class="ask">
+            <div class="field">
+                <label for="mood">mood</label>
+                <input id="mood" placeholder="sad, happy, cozy, adventurous…" />
+            </div>
+            <div class="field">
+                <label for="craving">craving</label>
+                <input id="craving" placeholder="pizza, ramen, spicy, comfort…" />
+            </div>
+            <button id="ask-btn">find me food</button>
+        </section>
+
+        <section class="recommendations">
+            <h2>picks for you</h2>
+            <div id="recs" class="rec-list">
+                <p class="muted">ask above to get recommendations from your memory bank.</p>
+            </div>
+        </section>
+
+        <section class="memory">
+            <h2>your food memory</h2>
+            <p class="muted">restaurants you've saved, organized by mood.</p>
+            <div id="folders" class="folders"></div>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
