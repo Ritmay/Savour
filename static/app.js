@@ -1,118 +1,160 @@
 const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
 
-async function getState() {
-    const res = await fetch("/api/state");
+const sessionId = crypto.randomUUID();
+let sending = false;
+
+// ---- API helpers ----
+
+async function api(path, body) {
+    const opts = body
+        ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+        : {};
+    const res = await fetch(path, opts);
     return res.json();
 }
 
-async function recommend(mood, craving) {
-    const res = await fetch("/api/recommend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mood, craving }),
-    });
-    return res.json();
-}
-
-async function setLocation(lat, lon) {
-    await fetch("/api/location", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ latitude: lat, longitude: lon }),
-    });
-}
-
-function renderLocation(loc) {
-    const chip = $("#location-chip");
-    const where = loc.neighborhood || loc.city || `${loc.latitude.toFixed(3)}, ${loc.longitude.toFixed(3)}`;
-    chip.textContent = `📍 ${where} · ${loc.search_radius_km}km radius`;
-}
+// ---- Sidebar: folders ----
 
 function renderFolders(folders) {
     const el = $("#folders");
     const names = Object.keys(folders);
-    if (names.length === 0) {
-        el.innerHTML = `<p class="muted">no saved restaurants yet.</p>`;
+    if (!names.length) {
+        el.innerHTML = `<p class="muted" style="padding:12px">no saved restaurants yet. start chatting to build your food memory.</p>`;
         return;
     }
-    el.innerHTML = names
-        .map((name) => {
-            const items = folders[name]
-                .map(
-                    (r) => `
-                    <li>
-                        <span>${r.name}</span>
-                        <span class="cuisine">${r.cuisine || ""}</span>
-                    </li>`
-                )
-                .join("");
-            return `
-                <div class="folder">
-                    <h3>${name}</h3>
-                    <ul>${items}</ul>
-                </div>`;
-        })
-        .join("");
+    el.innerHTML = names.map((name) => {
+        const items = folders[name].map((r) =>
+            `<div class="folder-item">
+                <span>${esc(r.name)}</span>
+                <span class="cuisine">${esc(r.cuisine || "")}</span>
+            </div>`
+        ).join("");
+        return `<div class="folder">
+            <div class="folder-header">${esc(name)}</div>
+            <div class="folder-items">${items}</div>
+        </div>`;
+    }).join("");
 }
 
-function renderRecs(recs) {
-    const el = $("#recs");
-    if (!recs.length) {
-        el.innerHTML = `<p class="muted">nothing in range matched. try a different mood or craving.</p>`;
-        return;
+function renderLocation(loc) {
+    const where = loc.neighborhood || loc.city || `${loc.latitude.toFixed(3)}, ${loc.longitude.toFixed(3)}`;
+    $("#location-chip").textContent = `${where} · ${loc.search_radius_km}km radius`;
+}
+
+// ---- Chat ----
+
+function addMessage(role, text) {
+    const container = $("#messages");
+    const div = document.createElement("div");
+    div.className = `message ${role}`;
+    div.innerHTML = `<div class="message-bubble">${formatReply(text)}</div>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function showTyping() {
+    const container = $("#messages");
+    const div = document.createElement("div");
+    div.className = "typing-indicator";
+    div.id = "typing";
+    div.innerHTML = `<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function hideTyping() {
+    const el = $("#typing");
+    if (el) el.remove();
+}
+
+function formatReply(text) {
+    return esc(text)
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/\n/g, "<br>");
+}
+
+function esc(s) {
+    const d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+async function sendMessage(text) {
+    if (sending || !text.trim()) return;
+    sending = true;
+    const btn = $("#send-btn");
+    btn.disabled = true;
+
+    addMessage("user", text);
+    showTyping();
+
+    try {
+        const data = await api("/api/chat", { message: text, session_id: sessionId });
+        hideTyping();
+        addMessage("assistant", data.reply);
+        if (data.folders) renderFolders(data.folders);
+    } catch (err) {
+        hideTyping();
+        addMessage("assistant", "Something went wrong. Make sure the server is running and ANTHROPIC_API_KEY is set.");
+    } finally {
+        sending = false;
+        btn.disabled = false;
     }
-    el.innerHTML = recs
-        .map((rec) => {
-            const r = rec.restaurant;
-            const tags = (r.tags || [])
-                .map((t) => `<span class="tag">${t}</span>`)
-                .join("");
-            return `
-                <div class="rec-card">
-                    <div>
-                        <div class="name">${r.name}</div>
-                        <div class="meta">${r.cuisine || ""} · ${rec.reason}</div>
-                        <div class="tags">${tags}</div>
-                    </div>
-                    <div class="score">${rec.score}</div>
-                </div>`;
-        })
-        .join("");
 }
 
-async function refresh() {
-    const state = await getState();
+// ---- Init ----
+
+async function init() {
+    const state = await api("/api/state");
     renderLocation(state.location);
     renderFolders(state.folders);
+
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+                await api("/api/location", { latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+                const updated = await api("/api/state");
+                renderLocation(updated.location);
+            },
+            () => {},
+            { timeout: 4000 }
+        );
+    }
 }
 
-async function onAsk() {
-    const mood = $("#mood").value;
-    const craving = $("#craving").value;
-    const { recommendations } = await recommend(mood, craving);
-    renderRecs(recommendations);
-}
+// ---- Events ----
 
-function askBrowserLocation() {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-            await setLocation(pos.coords.latitude, pos.coords.longitude);
-            refresh();
-        },
-        () => {
-            /* user denied — keep default */
-        },
-        { timeout: 4000 }
-    );
-}
+$("#chat-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const input = $("#chat-box");
+    const text = input.value;
+    input.value = "";
+    sendMessage(text);
+});
 
-$("#ask-btn").addEventListener("click", onAsk);
-["mood", "craving"].forEach((id) =>
-    $("#" + id).addEventListener("keydown", (e) => {
-        if (e.key === "Enter") onAsk();
-    })
-);
+$("#sidebar-toggle").addEventListener("click", () => {
+    $("#sidebar").classList.toggle("open");
+});
 
-refresh();
-askBrowserLocation();
+$("#add-folder-btn").addEventListener("click", () => {
+    $("#folder-modal").hidden = false;
+    $("#folder-name-input").focus();
+});
+
+$("#folder-cancel").addEventListener("click", () => {
+    $("#folder-modal").hidden = true;
+    $("#folder-name-input").value = "";
+});
+
+$("#folder-create").addEventListener("click", async () => {
+    const name = $("#folder-name-input").value.trim();
+    if (!name) return;
+    await api("/api/save", { folder: name, restaurant: { name: "(empty)" } });
+    const state = await api("/api/state");
+    renderFolders(state.folders);
+    $("#folder-modal").hidden = true;
+    $("#folder-name-input").value = "";
+});
+
+init();

@@ -3,42 +3,68 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Savourtaste — where should you eat?</title>
+    <title>Savourtaste</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
 <body>
-    <header class="hero">
-        <h1>savourtaste</h1>
-        <p class="tagline">tell me your mood. i'll tell you where to eat.</p>
-        <div class="location-chip" id="location-chip">loading location…</div>
-    </header>
-
-    <main>
-        <section class="ask">
-            <div class="field">
-                <label for="mood">mood</label>
-                <input id="mood" placeholder="sad, happy, cozy, adventurous…" />
+    <div class="layout">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h1 class="logo">savourtaste</h1>
+                <p class="logo-sub">your food memory</p>
             </div>
-            <div class="field">
-                <label for="craving">craving</label>
-                <input id="craving" placeholder="pizza, ramen, spicy, comfort…" />
+            <div class="location-chip" id="location-chip">loading location...</div>
+            <div class="folders" id="folders">
+                <p class="muted">loading memory...</p>
             </div>
-            <button id="ask-btn">find me food</button>
-        </section>
-
-        <section class="recommendations">
-            <h2>picks for you</h2>
-            <div id="recs" class="rec-list">
-                <p class="muted">ask above to get recommendations from your memory bank.</p>
+            <div class="sidebar-footer">
+                <button class="btn-ghost" id="add-folder-btn">+ new folder</button>
             </div>
-        </section>
+        </aside>
 
-        <section class="memory">
-            <h2>your food memory</h2>
-            <p class="muted">restaurants you've saved, organized by mood.</p>
-            <div id="folders" class="folders"></div>
+        <section class="chat-area">
+            <div class="chat-header">
+                <button class="btn-ghost sidebar-toggle" id="sidebar-toggle">menu</button>
+                <div>
+                    <h2 class="chat-title">savourtaste</h2>
+                    <p class="chat-subtitle">tell me how you feel. i'll tell you where to eat.</p>
+                </div>
+            </div>
+
+            <div class="messages" id="messages">
+                <div class="message assistant">
+                    <div class="message-bubble">
+                        Hey! I'm your food companion. Tell me your mood, what you're
+                        craving, or just how your day's going — I'll figure out where
+                        you should eat.
+                    </div>
+                </div>
+            </div>
+
+            <form class="chat-input" id="chat-form">
+                <input
+                    type="text"
+                    id="chat-box"
+                    placeholder="I'm feeling adventurous and want something spicy..."
+                    autocomplete="off"
+                />
+                <button type="submit" id="send-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+            </form>
         </section>
-    </main>
+    </div>
+
+    <div class="modal-overlay" id="folder-modal" hidden>
+        <div class="modal">
+            <h3>New Folder</h3>
+            <input type="text" id="folder-name-input" placeholder="Rainy Day Comfort..." />
+            <div class="modal-actions">
+                <button class="btn-ghost" id="folder-cancel">cancel</button>
+                <button class="btn-primary" id="folder-create">create</button>
+            </div>
+        </div>
+    </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
