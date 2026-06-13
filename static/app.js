@@ -1,10 +1,8 @@
 const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => document.querySelectorAll(sel);
-
 const sessionId = crypto.randomUUID();
 let sending = false;
 
-// ---- API helpers ----
+/* ---- API ---- */
 
 async function api(path, body) {
     const opts = body
@@ -14,20 +12,20 @@ async function api(path, body) {
     return res.json();
 }
 
-// ---- Sidebar: folders ----
+/* ---- Sidebar ---- */
 
 function renderFolders(folders) {
     const el = $("#folders");
     const names = Object.keys(folders);
     if (!names.length) {
-        el.innerHTML = `<p class="muted" style="padding:12px">no saved restaurants yet. start chatting to build your food memory.</p>`;
+        el.innerHTML = `<div class="empty-state"><p>no saved restaurants yet</p></div>`;
         return;
     }
     el.innerHTML = names.map((name) => {
         const items = folders[name].map((r) =>
             `<div class="folder-item">
                 <span>${esc(r.name)}</span>
-                <span class="cuisine">${esc(r.cuisine || "")}</span>
+                ${r.cuisine ? `<span class="cuisine">${esc(r.cuisine)}</span>` : ""}
             </div>`
         ).join("");
         return `<div class="folder">
@@ -38,28 +36,61 @@ function renderFolders(folders) {
 }
 
 function renderLocation(loc) {
-    const where = loc.neighborhood || loc.city || `${loc.latitude.toFixed(3)}, ${loc.longitude.toFixed(3)}`;
-    $("#location-chip").textContent = `${where} · ${loc.search_radius_km}km radius`;
+    const where = loc.neighborhood
+        ? `${loc.neighborhood}, ${loc.city || ""}`
+        : loc.city || `${loc.latitude.toFixed(3)}, ${loc.longitude.toFixed(3)}`;
+    $("#location-chip span").textContent = `${where} · ${loc.search_radius_km}km radius`;
 }
 
-// ---- Chat ----
+/* ---- Chat ---- */
 
 function addMessage(role, text) {
     const container = $("#messages");
-    const div = document.createElement("div");
-    div.className = `message ${role}`;
-    div.innerHTML = `<div class="message-bubble">${formatReply(text)}</div>`;
-    container.appendChild(div);
+
+    if (role === "assistant") {
+        const html = `
+            <div class="message assistant">
+                <div class="avatar-ring">
+                    <div class="avatar-sm">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/></svg>
+                    </div>
+                </div>
+                <div class="message-content">
+                    <div class="message-name">Savourtaste</div>
+                    <div class="message-bubble">${formatReply(text)}</div>
+                </div>
+            </div>`;
+        container.insertAdjacentHTML("beforeend", html);
+    } else {
+        const html = `
+            <div class="message user">
+                <div class="message-content">
+                    <div class="message-name">You</div>
+                    <div class="message-bubble">${esc(text)}</div>
+                </div>
+            </div>`;
+        container.insertAdjacentHTML("beforeend", html);
+    }
+
     container.scrollTop = container.scrollHeight;
 }
 
 function showTyping() {
     const container = $("#messages");
-    const div = document.createElement("div");
-    div.className = "typing-indicator";
-    div.id = "typing";
-    div.innerHTML = `<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>`;
-    container.appendChild(div);
+    const html = `
+        <div class="typing-wrapper" id="typing">
+            <div class="avatar-ring">
+                <div class="avatar-sm">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/></svg>
+                </div>
+            </div>
+            <div class="typing-dots">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+        </div>`;
+    container.insertAdjacentHTML("beforeend", html);
     container.scrollTop = container.scrollHeight;
 }
 
@@ -83,8 +114,7 @@ function esc(s) {
 async function sendMessage(text) {
     if (sending || !text.trim()) return;
     sending = true;
-    const btn = $("#send-btn");
-    btn.disabled = true;
+    $("#send-btn").disabled = true;
 
     addMessage("user", text);
     showTyping();
@@ -94,16 +124,17 @@ async function sendMessage(text) {
         hideTyping();
         addMessage("assistant", data.reply);
         if (data.folders) renderFolders(data.folders);
-    } catch (err) {
+    } catch {
         hideTyping();
         addMessage("assistant", "Something went wrong. Make sure the server is running and ANTHROPIC_API_KEY is set.");
     } finally {
         sending = false;
-        btn.disabled = false;
+        $("#send-btn").disabled = false;
+        $("#chat-box").focus();
     }
 }
 
-// ---- Init ----
+/* ---- Init ---- */
 
 async function init() {
     const state = await api("/api/state");
@@ -113,7 +144,10 @@ async function init() {
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
             async (pos) => {
-                await api("/api/location", { latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+                await api("/api/location", {
+                    latitude: pos.coords.latitude,
+                    longitude: pos.coords.longitude,
+                });
                 const updated = await api("/api/state");
                 renderLocation(updated.location);
             },
@@ -123,7 +157,7 @@ async function init() {
     }
 }
 
-// ---- Events ----
+/* ---- Events ---- */
 
 $("#chat-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -135,16 +169,29 @@ $("#chat-form").addEventListener("submit", (e) => {
 
 $("#sidebar-toggle").addEventListener("click", () => {
     $("#sidebar").classList.toggle("open");
+    $("#sidebar-overlay").classList.toggle("visible");
+});
+
+$("#sidebar-overlay").addEventListener("click", () => {
+    $("#sidebar").classList.remove("open");
+    $("#sidebar-overlay").classList.remove("visible");
 });
 
 $("#add-folder-btn").addEventListener("click", () => {
     $("#folder-modal").hidden = false;
-    $("#folder-name-input").focus();
+    setTimeout(() => $("#folder-name-input").focus(), 50);
 });
 
-$("#folder-cancel").addEventListener("click", () => {
+function closeModal() {
     $("#folder-modal").hidden = true;
     $("#folder-name-input").value = "";
+}
+
+$("#folder-cancel").addEventListener("click", closeModal);
+$("#folder-cancel-2").addEventListener("click", closeModal);
+
+$("#folder-modal").addEventListener("click", (e) => {
+    if (e.target === $("#folder-modal")) closeModal();
 });
 
 $("#folder-create").addEventListener("click", async () => {
@@ -153,8 +200,14 @@ $("#folder-create").addEventListener("click", async () => {
     await api("/api/save", { folder: name, restaurant: { name: "(empty)" } });
     const state = await api("/api/state");
     renderFolders(state.folders);
-    $("#folder-modal").hidden = true;
-    $("#folder-name-input").value = "";
+    closeModal();
+});
+
+$("#folder-name-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+        e.preventDefault();
+        $("#folder-create").click();
+    }
 });
 
 init();
